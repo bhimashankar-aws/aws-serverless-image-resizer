@@ -183,7 +183,7 @@ Screenshots make a GitHub project easier to understand. Capture your actual runn
 
 Save a screenshot as `screenshots/website.png`, then uncomment the line below:
 
-<!-- ![Website upload screen](screenshots/website.png) -->
+![Website upload screen](website.png)
 
 ### Resized image results
 
