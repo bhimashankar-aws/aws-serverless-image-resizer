@@ -227,4 +227,9 @@ The workflow diagram above is rendered from Mermaid by GitHub. It does not requi
 
 ## Author
 
-Created as a learning project to explore AWS serverless application development.
+## Author
+
+**Bhimashankar**
+
+Created as a learning project to explore AWS serverless application development using AWS Lambda, API Gateway, Amazon S3, Python, and Pillow.
+
