@@ -1,0 +1,443 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Serverless Image Resizer</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: #f3f6fb;
+    color: #202938;
+    padding: 25px 15px;
+}
+
+.container {
+    max-width: 900px;
+    margin: auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+header h1 {
+    color: #172b4d;
+    margin-bottom: 10px;
+}
+
+header p {
+    color: #637083;
+    line-height: 1.6;
+}
+
+.card {
+    background: white;
+    padding: 25px;
+    margin-bottom: 20px;
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.07);
+}
+
+h2 {
+    font-size: 21px;
+    margin-bottom: 18px;
+}
+
+.upload-area {
+    border: 2px dashed #a8b7ca;
+    border-radius: 10px;
+    padding: 25px 15px;
+    text-align: center;
+    background: #f9fbff;
+}
+
+input[type="file"] {
+    max-width: 100%;
+    margin-top: 15px;
+}
+
+#preview {
+    display: none;
+    max-width: 100%;
+    max-height: 260px;
+    margin: 20px auto 0;
+    border-radius: 8px;
+}
+
+.sizes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.size-option {
+    border: 1px solid #d6deea;
+    padding: 15px;
+    border-radius: 9px;
+    cursor: pointer;
+}
+
+.size-option input {
+    margin-right: 7px;
+}
+
+.size-option small {
+    display: block;
+    margin: 8px 0 0 24px;
+    color: #68778c;
+}
+
+button {
+    border: none;
+    border-radius: 8px;
+    padding: 13px 20px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#resizeBtn {
+    width: 100%;
+    color: white;
+    background: #ff9900;
+}
+
+#resizeBtn:hover {
+    background: #e88900;
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+#status {
+    margin-top: 18px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.result-item {
+    border: 1px solid #e0e6ef;
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+}
+
+.result-item img {
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    margin: 12px 0;
+}
+
+.download {
+    display: inline-block;
+    background: #16794b;
+    color: white;
+    text-decoration: none;
+    padding: 10px 14px;
+    border-radius: 7px;
+    margin-top: 8px;
+}
+
+footer {
+    text-align: center;
+    color: #758195;
+    padding: 15px;
+    font-size: 13px;
+}
+
+.hidden {
+    display: none;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+    <h1>AWS Serverless Image Resizer</h1>
+    <p>Upload your image and generate resized images using AWS Lambda and Amazon S3.</p>
+</header>
+
+<section class="card">
+    <h2>1. Upload Image</h2>
+
+    <div class="upload-area">
+        <p>Select a JPG, JPEG, PNG or WEBP image.</p>
+        <input
+            type="file"
+            id="imageFile"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+        >
+        <img id="preview" alt="Selected image preview">
+        <p id="fileInfo"></p>
+    </div>
+
+    <h2 style="margin-top:25px;">2. Select Image Sizes</h2>
+
+    <div class="sizes">
+        <label class="size-option">
+            <input type="checkbox" name="sizes" value="thumbnail" checked>
+            <strong>Thumbnail</strong>
+            <small>100 × 100 px</small>
+        </label>
+
+        <label class="size-option">
+            <input type="checkbox" name="sizes" value="medium" checked>
+            <strong>Medium</strong>
+            <small>500 × 500 px</small>
+        </label>
+
+        <label class="size-option">
+            <input type="checkbox" name="sizes" value="large" checked>
+            <strong>Large</strong>
+            <small>1200 × 1200 px</small>
+        </label>
+    </div>
+
+    <button id="resizeBtn" type="button">Upload & Resize Image</button>
+
+    <p id="status" role="status" aria-live="polite"></p>
+</section>
+
+<section id="resultsSection" class="card hidden">
+    <h2>3. Resized Images</h2>
+    <div id="results" class="result-grid"></div>
+</section>
+
+<footer>
+    Powered by AWS API Gateway, AWS Lambda and Amazon S3
+</footer>
+
+</div>
+
+<script>
+const API_URL =
+    "https://58ulnxthsa.execute-api.ap-south-1.amazonaws.com/upload";
+
+const fileInput = document.getElementById("imageFile");
+const preview = document.getElementById("preview");
+const fileInfo = document.getElementById("fileInfo");
+const resizeBtn = document.getElementById("resizeBtn");
+const statusBox = document.getElementById("status");
+const resultsSection = document.getElementById("resultsSection");
+const resultsBox = document.getElementById("results");
+
+let previewUrl = null;
+
+fileInput.addEventListener("change", function () {
+    const file = fileInput.files[0];
+
+    statusBox.textContent = "";
+    resultsBox.replaceChildren();
+    resultsSection.classList.add("hidden");
+
+    if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
+    }
+
+    if (!file) {
+        preview.style.display = "none";
+        fileInfo.textContent = "";
+        return;
+    }
+
+    const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ];
+
+    const extensionAllowed =
+        /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+
+    if (!extensionAllowed ||
+        (file.type && !allowedTypes.includes(file.type))) {
+        fileInput.value = "";
+        preview.style.display = "none";
+        fileInfo.textContent = "";
+        statusBox.textContent =
+            "Please select a JPG, JPEG, PNG or WEBP image.";
+        return;
+    }
+
+    previewUrl = URL.createObjectURL(file);
+    preview.src = previewUrl;
+    preview.style.display = "block";
+
+    fileInfo.textContent =
+        file.name + " (" + (file.size / 1024).toFixed(1) + " KB)";
+});
+
+resizeBtn.addEventListener("click", async function () {
+    const file = fileInput.files[0];
+
+    if (!file) {
+        statusBox.textContent = "Please select an image first.";
+        return;
+    }
+
+    const selectedSizes = Array.from(
+        document.querySelectorAll('input[name="sizes"]:checked')
+    ).map(input => input.value);
+
+    if (selectedSizes.length === 0) {
+        statusBox.textContent =
+            "Please select at least one image size.";
+        return;
+    }
+
+    const formData = new FormData();
+
+    // These field names match the supplied Lambda code.
+    formData.append("file", file, file.name);
+    formData.append("sizes", JSON.stringify(selectedSizes));
+
+    resizeBtn.disabled = true;
+    resizeBtn.textContent = "Uploading and Resizing...";
+    statusBox.textContent = "Please wait. Processing your image...";
+    resultsBox.replaceChildren();
+    resultsSection.classList.add("hidden");
+
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            body: formData
+        });
+
+        const rawText = await response.text();
+        let data;
+
+        try {
+            data = JSON.parse(rawText);
+        } catch {
+            throw new Error(
+                "The API returned an unexpected response. HTTP " +
+                response.status
+            );
+        }
+
+        // Handle API Gateway responses that wrap the Lambda response.
+        if (typeof data.body === "string") {
+            try {
+                data = JSON.parse(data.body);
+            } catch {
+                throw new Error(data.body || "Invalid API response.");
+            }
+        } else if (data.body && typeof data.body === "object") {
+            data = data.body;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                data.error || data.message ||
+                ("Request failed: HTTP " + response.status)
+            );
+        }
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        if (!data.images || typeof data.images !== "object") {
+            throw new Error(
+                data.message ||
+                "The API response did not contain resized image links."
+            );
+        }
+
+        const labels = {
+            thumbnail: "Thumbnail (100 × 100)",
+            medium: "Medium (500 × 500)",
+            large: "Large (1200 × 1200)"
+        };
+
+        let count = 0;
+
+        selectedSizes.forEach(size => {
+            const url = data.images[size];
+
+            if (typeof url !== "string" || !url.startsWith("https://")) {
+                return;
+            }
+
+            count++;
+
+            const item = document.createElement("div");
+            item.className = "result-item";
+
+            const heading = document.createElement("h3");
+            heading.textContent = labels[size] || size;
+
+            const image = document.createElement("img");
+            image.src = url;
+            image.alt = labels[size] || size;
+            image.loading = "lazy";
+
+            image.onerror = function () {
+                image.alt = "Preview unavailable. Use the download link.";
+            };
+
+            const link = document.createElement("a");
+            link.href = url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.className = "download";
+            link.textContent = "Open / Download";
+
+            item.append(heading, image, link);
+            resultsBox.appendChild(item);
+        });
+
+        if (count === 0) {
+            throw new Error(
+                "No valid image URLs were returned by Lambda."
+            );
+        }
+
+        resultsSection.classList.remove("hidden");
+        statusBox.textContent =
+            "Success! " + count + " resized image(s) created.";
+
+    } catch (error) {
+        console.error("Image resize error:", error);
+
+        if (error instanceof TypeError) {
+            statusBox.textContent =
+                "Upload failed: Browser could not connect to the API. " +
+                "Check CORS settings, API URL, and run this page using " +
+                "VS Code Live Server instead of opening file:// directly.";
+        } else {
+            statusBox.textContent =
+                "Upload failed: " + error.message;
+        }
+
+    } finally {
+        resizeBtn.disabled = false;
+        resizeBtn.textContent = "Upload & Resize Image";
+    }
+});
+</script>
+</body>
+</html>
